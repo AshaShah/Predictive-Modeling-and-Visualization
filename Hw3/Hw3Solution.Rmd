@@ -1,0 +1,343 @@
+---
+title: "Homework 3"
+author: 'Group-3 Members: Asha Shah | Prabhath Pasula | Rithwik Reddy Nandyala'
+date: 'April , 2025'
+output:
+  html_document:
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(caret)
+library(dplyr)
+library(pROC)
+```
+
+# Question 1: Student Performance Data
+
+## Part (a): Formulate a Question
+
+**Question**: How do `Hours Studied`, `Previous Scores`, `Extracurricular Activities`, `Sleep Hours`, and `Sample Question Papers Practiced` predict a student's performance (`Performance Index`)?  
+- **Predictor Variables**: `Hours Studied`, `Previous Scores`, `Extracurricular Activities`, `Sleep Hours`, `Sample Question Papers Practiced`  
+- **Target Variable**: `Performance Index`
+
+---
+
+## Part (b): Split Data into Training and Test Sets
+
+```{r}
+# Load the data
+student_data <- read.csv("student_performance.csv")
+
+# Convert categorical variables to factors
+student_data$Extracurricular.Activities <- as.factor(student_data$Extracurricular.Activities)
+
+# Split into training (70%) and test (30%) sets
+set.seed(123)
+train_index <- sample(1:nrow(student_data), 0.7 * nrow(student_data))
+train_data <- student_data[train_index, ]
+test_data <- student_data[-train_index, ]
+```
+
+---
+
+## Part (c): Train a Multiple Linear Regression Model with 10-Fold Cross-Validation
+
+```{r}
+# Train the model using 10-fold cross-validation
+set.seed(123)
+student_model <- train(
+  Performance.Index ~ Hours.Studied + Previous.Scores + Extracurricular.Activities +
+    Sleep.Hours + Sample.Question.Papers.Practiced,
+  data = train_data,
+  method = "lm",
+  trControl = trainControl(method = "cv", number = 10, verboseIter = TRUE)
+)
+
+# Summary of the model
+summary(student_model)
+```
+
+### Interpretation of Coefficients
+Hours Studied:
+Coefficient: β1
+For every additional hour studied, the performance index increases by approximately 
+2.85 units, holding all other variables constant. This indicates that studying 
+more hours has a strong positive impact on performance.
+
+Previous Scores:
+Coefficient: β2
+For each additional unit increase in previous test scores, the performance index 
+increases by approximately 1.02 units, holding all other variables constant. 
+This suggests that past performance is a strong predictor of current performance.
+
+Extracurricular Activities (Yes):
+Coefficient: β3
+Students who participate in extracurricular activities have a performance index 
+that is, on average, 0.57 units higher than those who do not, holding all other 
+variables constant.
+
+Sleep Hours:
+Coefficient: β4
+For every additional hour of sleep, the performance index increases by 
+approximately 0.49 units, holding all other variables constant. This highlights 
+the importance of sleep for academic performance.
+
+Sample Question Papers Practiced:
+Coefficient: β5
+For every additional sample question paper practiced, the performance index 
+increases by approximately 0.19 units, holding all other variables constant. 
+While this effect is smaller, it is still positive and meaningful.
+
+Conclusion:
+- Hours Studied and Previous Scores have the largest impact on the Performance Index.
+- Extracurricular Activities, Sleep Hours, and Sample Question Papers Practiced also 
+positively contribute to performance, but their effects are smaller.
+- The model explains a large portion of the variance in the Performance Index, 
+as indicated by the high R-squared value (R2).
+
+
+### Fitted Regression Equation
+Performance_Index <- -34.047166 + 
+                     2.850817 * Hours_Studied + 
+                     1.018021 * Previous_Scores +
+                     0.571091 * Extracurricular_ActivitiesYes + 
+                     0.488381 * Sleep_Hours + 
+                     0.190325 * Sample_Question_Papers_Practiced 
+
+---
+
+## Part (d): Evaluate Model Performance on the Test Set
+
+```{r}
+# Predict on the test set
+predictions <- predict(student_model, newdata = test_data)
+
+# Calculate R-squared and RMSE
+r_squared <- cor(test_data$Performance.Index, predictions)^2
+errors <- predictions - test_data$Performance.Index
+rmse <- sqrt(mean(errors^2))
+
+# Print results
+cat("R-squared:", r_squared, "\n")
+cat("RMSE:", rmse, "\n")
+```
+
+### Comments on Model Performance
+- **R-squared (R^2): 0.9893**
+- This indicates that 98.93% of the variance in the Performance Index is explained 
+by the predictor variables in the model.
+- A high (R^2) value like this suggests that the model fits the data very well and 
+has strong predictive power.
+
+-**Root Mean Squared Error (RMSE): 1.9954**
+- The RMSE indicates that, on average, the model's predictions are about 1.9954 
+units away from the actual Performance Index values.
+- Given the scale of the Performance Index (ranging from 10 to 100), this is a 
+very small error, which demonstrates that the model has high accuracy.
+
+Comments:
+- The high (R^2) value and low RMSE both suggest that the regression model performs 
+exceptionally well on the test set.
+- The model generalizes well to unseen data, as evidenced by the low prediction error.
+---
+
+## Part (e): Residual Diagnostics
+
+```{r}
+# Extract residuals from the fitted model
+residuals <- residuals(student_model$finalModel)
+
+# Residuals vs Fitted Values Plot (Linearity and Homoscedasticity)
+plot(fitted(student_model$finalModel), residuals,
+     main = "Residuals vs Fitted Values",
+     xlab = "Fitted Values",
+     ylab = "Residuals",
+     pch = 19, col = "blue")
+abline(h = 0, col = "red", lwd = 2)
+
+# Histogram of Residuals (Normality)
+hist(residuals, main = "Histogram of Residuals",
+     xlab = "Residuals", col = "lightblue", breaks = 30)
+
+# Q-Q Plot (Normality)
+qqnorm(residuals, main = "Q-Q Plot of Residuals")
+qqline(residuals, col = "red", lwd = 2)
+```
+
+### Comments on Diagnostics
+1. Linearity and Homoscedasticity
+- The residuals are randomly scattered around the horizontal red line (y=0) without 
+any clear pattern or trend.
+- The spread of residuals is relatively constant for all fitted values, indicating 
+no evidence of heteroscedasticity (non-constant variance).
+
+Conclusion:
+The assumptions of linearity and homoscedasticity are satisfied. The linear 
+regression model is appropriate for the data in terms of these assumptions.
+
+2. Normality of Residuals
+- The histogram of residuals closely resembles a bell-shaped curve, indicating 
+that the residuals are symmetrically distributed around 0.
+- The Q-Q plot shows that most residuals lie close to the 45-degree red line, 
+suggesting that the residuals follow a normal distribution. Minor deviations at 
+the extremes (tails) are observed but are not significant.
+
+Conclusion:
+The residuals are approximately normally distributed, satisfying the normality 
+assumption of the linear regression model.
+
+Overall, the diagnostics confirm that the model assumptions are reasonably satisfied, 
+and the regression model is suitable for making predictions and drawing inferences.
+---
+
+## Part (f): Proposed Interventions
+
+### Proposed Interventions to Improve Student Performance
+Based on the insights gained from the analysis, the following interventions are 
+proposed to enhance student performance:
+
+1. **Increase Study Hours**:
+   - Since "Hours Studied" has the strongest positive impact on performance, 
+   structured study schedules, peer study groups, and study-time tracking tools 
+   should be introduced to encourage students to dedicate more time to studying.
+
+2. **Target Low-Performing Students**:
+   - "Previous Scores" are a strong predictor of performance. Students with low 
+   prior scores should be identified and offered remedial programs, tutoring, or 
+   personalized learning plans.
+
+3. **Promote Extracurricular Activities**:
+   - Participation in extracurricular activities has a positive effect on 
+   performance. Schools should encourage students to engage in such activities 
+   to foster holistic development and improve academic outcomes.
+
+4. **Encourage Healthy Sleep Habits**:
+   - Proper sleep is crucial for cognitive functioning and performance. Awareness 
+   campaigns and student counseling can help students adopt healthier sleep patterns.
+
+5. **Increase Practice with Sample Papers**:
+   - Practicing more sample question papers helps familiarize students with exam 
+   formats and reduces test anxiety. Schools should provide additional resources 
+   and time for mock exams.
+
+### Addressing Minor Assumption Violations
+While the model assumptions are largely satisfied, there are minor deviations in 
+the Q-Q plot at the tails, indicating potential outliers or slight non-normality. 
+Remedies include:
+
+- **Handling Outliers**:
+  - Investigate the data points contributing to the deviations. If necessary, 
+  apply robust regression techniques or data transformations (e.g., log or square root) 
+  to minimize their impact.
+
+- **Improving Model Complexity**:
+  - If additional non-linear relationships are suspected, consider adding polynomial 
+  or interaction terms to capture more complex patterns in the data.
+
+Through these targeted interventions and minor refinements, student performance 
+can be further improved, while maintaining a robust and reliable regression model.
+---
+
+# Question 2: Loan Status Prediction
+
+## Part (a): Split Data into Training and Test Sets
+
+```{r}
+# Load the data
+loan_data <- read.csv("loan_data.csv")
+
+# Print column names
+colnames(loan_data)
+
+# Convert categorical variables to factors
+loan_data$Gender <- as.factor(loan_data$Gender)
+loan_data$Married <- as.factor(loan_data$Married)
+loan_data$Education <- as.factor(loan_data$Education)
+loan_data$Self_Employed <- as.factor(loan_data$Self_Employed)
+loan_data$Property_Area <- as.factor(loan_data$Property_Area)
+loan_data$Loan_Status <- as.factor(loan_data$Loan_Status)
+
+# Handle missing values
+loan_data$LoanAmount[is.na(loan_data$LoanAmount)] <- median(loan_data$LoanAmount, na.rm = TRUE)
+loan_data$Loan_Amount_Term[is.na(loan_data$Loan_Amount_Term)] <- median(loan_data$Loan_Amount_Term, na.rm = TRUE)
+loan_data$Credit_History[is.na(loan_data$Credit_History)] <- median(loan_data$Credit_History, na.rm = TRUE)
+loan_data$Gender[is.na(loan_data$Gender)] <- as.factor("Missing")
+loan_data$Married[is.na(loan_data$Married)] <- as.factor("Missing")
+loan_data$Dependents[is.na(loan_data$Dependents)] <- as.factor("0")
+loan_data$Self_Employed[is.na(loan_data$Self_Employed)] <- as.factor("No")
+
+# Split into training (80%) and test (20%) sets
+set.seed(123)
+train_index <- sample(1:nrow(loan_data), 0.8 * nrow(loan_data))
+train_data <- loan_data[train_index, ]
+test_data <- loan_data[-train_index, ]
+```
+
+---
+
+## Part (b): Train Logistic Regression Model
+
+```{r}
+# Train the logistic regression model
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
+
+loan_model <- train(
+  Loan_Status ~ Gender + Married + Dependents + Education + Self_Employed +
+    ApplicantIncome + CoapplicantIncome + LoanAmount + Loan_Amount_Term +
+    Credit_History + Property_Area,
+  data = train_data,
+  method = "glm",
+  family = binomial,
+  trControl = train_control,
+  metric = "ROC"
+)
+
+
+# Summary of the model
+summary(loan_model)
+```
+
+---
+
+## Part (c): Evaluate Model Performance on the Test Set
+
+```{r}
+# Predict on the test set
+predictions <- predict(loan_model, newdata = test_data)
+probabilities <- predict(loan_model, newdata = test_data, type = "prob")[, "Y"]
+
+# Confusion matrix
+conf_matrix <- confusionMatrix(predictions, test_data$Loan_Status, positive = "Y")
+
+# Metrics
+cat("Accuracy:", conf_matrix$overall["Accuracy"], "\n")
+cat("Sensitivity:", conf_matrix$byClass["Sensitivity"], "\n")
+cat("Specificity:", conf_matrix$byClass["Specificity"], "\n")
+
+# AUC
+test_data$Loan_Status_numeric <- ifelse(test_data$Loan_Status == "Y", 1, 0)
+roc_curve <- roc(test_data$Loan_Status_numeric, probabilities)
+auc_value <- auc(roc_curve)
+cat("AUC:", auc_value, "\n")
+```
+
+### Comments on Model Performance
+- **Accuracy**: Indicates that 80.5% of the predictions made by the model are 
+correct, showing reasonably good overall performance.
+- **Sensitivity**: The model perfectly predicts approved loans (100%), meaning 
+it correctly identifies all positive cases.
+- **Specificity**: At 48.3%, the model struggles to correctly predict denied 
+loans, leading to a higher rate of false positives.
+- **AUC**: With a value of 0.802, the model exhibits good discriminatory power 
+in distinguishing approved from denied loans, though there is room for improvement.
+---

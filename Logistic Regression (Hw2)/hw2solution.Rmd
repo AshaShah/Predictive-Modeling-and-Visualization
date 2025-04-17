@@ -1,0 +1,1069 @@
+---
+title: "Homework 2"
+author: 'Group-3 Members: Asha Shah | Prabhath Pasula | Rithwik Reddy Nandyala'
+date: 'April 14, 2025'
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+---
+
+## Introduction
+
+In this task, we discuss the problem of absenteeism in the modern dynamic workplace
+environment using logistic regression. We are attempting to forecast and understand 
+the patternsof absenteeism founded on a diverse dataset of a Brazilian courier company.
+Also, we are studying flu shot statistics to learn the determinants of flu
+vaccination uptake.
+
+## Setup
+```{r}
+library(dplyr)
+library(readxl)
+library(nnet)
+library(GGally)
+library(tidyverse)
+library(MASS)
+```
+#__________________________
+# Absenteeism Data Analysis
+#__________________________
+
+### Question (a): How is the ‘Absenteeism time in hours’ distributed? Are there 
+###             any noticeable patterns or outliers?
+
+#### Explanation
+
+Exploratory Data Analysis (EDA) involves summarizing the main characteristics of 
+a dataset by using visual methods. This step is crucial to understand the structure 
+of the data, identify patterns, detect outliers, and check assumptions before 
+performing further analysis.
+
+#### Code
+
+```{r load_absenteeism_data}
+# Load and prepare the data
+absent = read_excel("Absenteeism_at_work.xls")
+names(absent) #column names
+
+# Recode absenteeism into categories
+absent <- absent %>%
+  mutate(absenteeism = case_when(
+    Absenteeism_time_in_hours >= 0 & Absenteeism_time_in_hours <= 20 ~ "Low",
+    Absenteeism_time_in_hours > 20 & Absenteeism_time_in_hours <= 40 ~ "Moderate",
+    Absenteeism_time_in_hours > 40 ~ "High"
+  ))
+
+
+# Convert categorical variables to factors
+absent$absenteeism <- factor(absent$absenteeism, levels = c("Low", "Moderate", "High"))
+absent$Day_of_the_week <- factor(absent$Day_of_the_week,
+                                  levels = 2:6,
+                                  labels = c("Monday", "Tuesday", "Wednesday", 
+                                             "Thursday", "Friday"))
+absent$Seasons <- factor(absent$Seasons,
+                         levels = 1:4,
+                         labels = c("Summer", "Autumn", "Winter", "Spring"))
+absent$Education <- factor(absent$Education,
+                           levels = 1:4,
+                           labels = c("High School", "Graduate", "Postgraduate", 
+                                      "Master/Doctor"))
+
+
+# Summary statistics to identify patterns and outliers
+summary(absent$Absenteeism_time_in_hours)
+
+#Analyze the distribution of 'Absenteeism time in hours'
+# Histogram
+hist(absent$Absenteeism_time_in_hours, 
+     main = "Histogram of Absenteeism Time",
+     xlab = "Absenteeism Time (Hours)", 
+     col = "lightblue")
+
+
+# Boxplot to detect outliers
+boxplot(absent$Absenteeism_time_in_hours, 
+        main = "Boxplot of Absenteeism Time", 
+        ylab = "Absenteeism Time (Hours)", 
+        col = "lightgreen")
+```
+
+#### Observations for Question (a)
+
+```markdown
+The histogram of Absenteeism time in hours is highly skewed to the right, with the 
+bulk of workers in the category of low absenteeism (0–10 hours). The histogram shows 
+a strong frequency at the lower end, and the boxplot highlights a few outliers at 
+absenteeism higher than 10 hours, as high as 120 hours. These outliers signal 
+occasional cases of extended absenteeism, which deserves further investigation. 
+Generally, data cluster around small values, but some extreme points pull the 
+upper tail of the distribution upwards.
+```
+
+### Question (b): What is the distribution of ages among the employees? Are certain 
+###             age groups more prevalent?
+
+#### Explanation
+Understanding the distribution of a variable helps to know its spread, central 
+tendency trend, and if there are any outliers. This is valuable information for 
+selecting appropriate statistical methods for analysis.
+#### Code
+
+```{r}
+
+# Summary statistics for age
+summary(absent$Age)
+
+# Categorize ages into groups
+age_groups <- absent %>%
+  mutate(age_group = case_when(
+    Age >= 20 & Age <= 30 ~ "20-30",
+    Age >= 31 & Age <= 40 ~ "31-40",
+    Age >= 41 & Age <= 50 ~ "41-50",
+    Age >= 51 & Age <= 60 ~ "51-60",
+    Age > 60 ~ "61+"
+  )) %>%
+  group_by(age_group) %>%
+  summarise(count = n())
+
+# View the frequency of age groups
+print(age_groups)
+
+# Bar chart of age groups
+barplot(age_groups$count, 
+        names.arg = age_groups$age_group, 
+        main = "Age Group Distribution", 
+        xlab = "Age Groups", 
+        ylab = "Number of Employees", 
+        col = "lightgreen")
+```
+
+#### Observations for Question (b)
+
+```markdown
+The distribution of employees by age shows that most of the employees belong to 
+the 31–40 age group, with 422 employees, the most frequent. The second is the 
+20–30 age group, with 177 employees, and the 41–50 age group with 132 employees. 
+The least frequent age group is the 51–60 age group, with a total of 9 employees.
+
+The summary statistics reveal the minimum age of 27, the maximum of 58, and the 
+median of 37, which tells us that the data is centered on mid-career employees. 
+The age distribution is roughly symmetric with the majority of employees having 
+ages between 31 and 40 years, as revealed by both the bar graph and the frequency 
+table. The structure of this population reveals an experienced workforce with the 
+majority of the employees not being too young or near retirement.
+```
+
+### Question (c): Is there a correlation between the distance from residence to work 
+###             and absenteeism time?
+
+#### Explanation
+
+Understanding the correlation between home to workplace distance and absenteeism 
+length can ascertain whether greater distances of commuting influence worker 
+absenteeism. This can inform whether proximity to the workplace is a 
+determining factor in workers' work attendance.
+1. Use a **scatter plot** to visualize the relationship between the two variables: 
+`Distance_from_Residence_to_Work` and `Absenteeism_time_in_hours`.
+2. Calculate the **correlation coefficient** to quantify the strength and direction 
+of the relationship.
+3. Interpret the results to determine if the distance significantly impacts 
+absenteeism.
+
+#### Code
+
+```{r}
+# Scatter plot of distance vs absenteeism time
+plot(absent$Distance_from_Residence_to_Work, absent$Absenteeism_time_in_hours,
+     main = "Scatter Plot: Distance to Work vs Absenteeism Time",
+     xlab = "Distance from Residence to Work (km)",
+     ylab = "Absenteeism Time (hours)",
+     col = "blue", pch = 19)
+
+# Calculate and display the Pearson correlation coefficient
+correlation <- cor(absent$Distance_from_Residence_to_Work, 
+                   absent$Absenteeism_time_in_hours, method = "pearson")
+correlation
+```
+
+#### Observations for Question (c)
+
+```markdown
+The scatter plot and correlation coefficient both indicate no actual correlation 
+between Distance from Residence to Work and Absenteeism Time. The correlation 
+coefficient is -0.088, and that is effectively 0, which indicates no actual linear 
+relationship. This would imply that commute distance has no influence on absenteeism, 
+and other factors may be more significant.
+```
+
+### Question (d): How does the work load average per day relate to absenteeism? Are 
+###             higher workloads associated with more or less absenteeism?
+
+#### Code
+
+```{r}
+# Summary statistics for workload average per absenteeism category
+aggregate(Work_load_Average_in_days ~ absenteeism, data = absent, mean)
+
+# Boxplot to visualize workload vs absenteeism levels
+boxplot(Work_load_Average_in_days ~ absenteeism, data = absent,
+        main = "Workload vs. Absenteeism Levels",
+        xlab = "Absenteeism Levels",
+        ylab = "Average Workload per Day",
+        col = c("lightblue", "green", "red"))
+
+# ANOVA test to check if differences are statistically significant
+anova_result <- aov(Work_load_Average_in_days ~ absenteeism, data = absent)
+summary(anova_result)
+```
+
+#### Observations for Question (d)
+
+```markdown
+Higher workloads are associated with moderate absenteeism 
+(highest workload:296,701.5). An ANOVA test confirms the differences in
+workload across absenteeism levels are statistically significant 
+((p = 0.00154)). However, high absenteeism corresponds to the lowest workload,
+suggesting that excessive absenteeism may not directly result from higher
+workloads.
+```
+
+### Question (e): Analyze the absenteeism based on education levels. Do certain 
+###             education levels correlate with higher or lower absenteeism?
+
+#### Explanation
+To analyze absenteeism by education levels, we would like to know how absenteeism 
+varies by different education levels. This involves:
+
+Categorizing Data: Splitting the data into education levels (e.g., High School, 
+Graduate, Postgraduate, Doctorate).
+Summarizing Absenteeism: Finding the frequency or proportion of the levels of 
+absenteeism (Low, Moderate, High) for each level of education.
+Visual Interpretation: Use visual tools like bar plots to visualize trends across 
+education levels.
+Statistical Testing: Fisher's Exact Test is a statistical test used to determine 
+whether there is a significant association (or relationship) between two categorical variables.
+
+#### Code
+
+```{r}
+# Summary statistics: Count of absenteeism levels by education
+education_absenteeism <- table(absent$Education, absent$absenteeism)
+print(education_absenteeism)
+
+# Barplot to visualize absenteeism by education level
+barplot(education_absenteeism, beside = TRUE, 
+        col = c("lightblue", "orange", "green", "purple"),
+        legend = rownames(education_absenteeism),
+        main = "Absenteeism Levels by Education",
+        xlab = "Absenteeism Levels",
+        ylab = "Count")
+
+fisher_result <- fisher.test(education_absenteeism)
+print(fisher_result)
+```
+
+#### Observations for Question (e)
+
+```markdown
+High school education dominates absenteeism, especially in the Low category, 
+while higher education levels (Graduate, Postgraduate, Master/Doctorate) show 
+minimal absenteeism. The Fisher's Exact Test produced a p-value of 0.8036, which 
+is much greater than 0.05.
+This means there is no significant evidence to suggest that education levels and 
+absenteeism levels are correlated.
+```
+
+### Question (f): Which variables show the strongest correlation with 
+###             absenteeism time in hours? How might these influence your logistic 
+###             regression model?
+
+#### Explanation
+
+To discover which variables are most correlated with Absenteeism_time_in_hours, 
+we compute Pearson correlation coefficients of absenteeism time with all other 
+numeric variables in the data set. This will identify for us the variables most 
+correlated with absenteeism. These can now be used as possible predictors in a 
+logistic regression model.
+
+#### Code
+
+```{r}
+# Compute correlation coefficients for numeric variables
+correlation_matrix <- cor(absent[, sapply(absent, is.numeric)], use = "complete.obs")
+
+# Extract correlations with Absenteeism_time_in_hours
+absenteeism_correlations <- correlation_matrix["Absenteeism_time_in_hours", ]
+
+# Sort correlations in descending order
+sorted_correlations <- sort(absenteeism_correlations, decreasing = TRUE)
+
+# Display the sorted correlations
+print(sorted_correlations)
+
+# Select top 5 correlated variables (excluding absenteeism itself)
+top_variables <- names(sorted_correlations)[2:6]
+
+# Create scatter plots for the top correlated variables using Base R
+for (var in top_variables) {
+  # Create the scatter plot
+  plot(absent[[var]], absent$Absenteeism_time_in_hours,
+       main = paste("Scatter Plot:", var, "vs Absenteeism Time"),
+       xlab = var,
+       ylab = "Absenteeism Time (Hours)",
+       col = "darkblue",
+       pch = 16) # Use circular points
+}
+```
+
+#### Observations for Question (f)
+
+```markdown
+Height (0.144):
+- Shows the strongest positive correlation among the variables. Taller individuals 
+seem to have slightly higher absenteeism, but the relationship is weak.
+
+Son (0.114):
+- Indicates a weak positive correlation; individuals with more sons might have 
+slightly higher absenteeism, but again, the effect is minimal.
+
+Age (0.066):
+Weak positive correlation; older individuals show slightly higher absenteeism, 
+but this trend is not strong.
+
+Transportation_expense (0.028) and Work_load_Average_in_days (0.025):
+Very weak positive correlations; these variables do not strongly impact absenteeism time.
+
+Conclusion:
+Most highly correlated with absenteeism time are Height, Son, and Age, though the 
+correlations are weak. These variables might contribute some predictive power to 
+a logistic regression model incorporating them, but their impact is small. 
+There could be other variables or interactions that play a more important role 
+in absenteeism.
+```
+
+### Question (g): Are there any unexpected correlations or findings that challenge 
+###             common assumptions about workplace absenteeism?
+
+#### Answer for Question (g)
+
+```markdown
+Yes, analysis revealed some unexpected correlations:
+
+Height:
+Height correlated most strongly with absenteeism time (0.144), and this is surprising 
+since body height is not generally considered to be a factor in workplace absenteeism.
+
+Son:
+The number of sons had a weak positive correlation (0.114). This is contrary to 
+the assumption that family responsibilities (having children) are likely to 
+affect absenteeism in some predictable way.
+
+Workload:
+Workload-absenteeism relationship was not significant (0.025). This is contrary 
+to expectations because higher workloads are expected to lead to absenteeism due 
+to stress or burnout.
+
+Transportation expenses:
+Transportation cost showed a poor relationship (0.028), contrary to the expectation 
+that higher transportation costs lead to higher absenteeism.
+
+Conclusion
+These findings suggest that some variables commonly thought to influence absenteeism, 
+such as workload or travel cost, will have little effect on absenteeism. By contrast, 
+the height and number of sons correlation is anomalous and possibly subject to 
+further investigation in discounting coincidental or indirect influences.
+```
+
+### Question (h): Does service time (duration of service in the company) have any 
+###             impact on the absenteeism rate?
+
+#### Code
+
+```{r}
+# Compute correlation coefficients for numeric variables
+correlation_matrix <- cor(absent[, sapply(absent, is.numeric)], use = "complete.obs")
+
+# Extract correlation between service time and absenteeism time
+service_time_correlation <- correlation_matrix["Absenteeism_time_in_hours", 
+                                               "Service_time"]
+
+# Print the correlation coefficient
+print(paste("Correlation between Service Time and Absenteeism Time: ", 
+            round(service_time_correlation, 3)))
+
+# Scatter plot for Service Time vs Absenteeism Time using Base R
+plot(absent$Service_time, absent$Absenteeism_time_in_hours,
+     main = "Scatter Plot: Service Time vs Absenteeism Time",
+     xlab = "Service Time (Years)",
+     ylab = "Absenteeism Time (Hours)",
+     col = "darkblue",
+     pch = 16) # Use circular points
+```
+
+#### Observations for Question (h)
+
+```markdown
+Correlation Analysis:
+The correlation between the time of service and the time of absenteeism in hours 
+was 0.019, and it is close to zero. This indicates that there is no linear relation 
+between the variables.
+
+Scatter Plot Interpretation:
+- The scatter plot confirms that there is no visible pattern or trend. The points 
+are comparatively scattered, suggesting no systematic relationship between the 
+time of service and the time of absenteeism.
+- Staff within different durations of service tend to show equivalent behaviors 
+for absenteeism, implying that service time itself has minimal direct effects on 
+absenteeism.
+
+Conclusion:
+The implication of the findings is that the service time cannot play an instrumental 
+role in significantly affecting the absenteeism rate. This disredits any precepts 
+that employees working longer can or should have greater or lesser instances of 
+absenteeism than their counterworkers working short. Possibly more contributing 
+factors need to be factored into their decision.
+```
+
+### Question (i): Examine if day of the week has any influence on absenteeism – 
+###.            are certain days more prone to absences?
+
+#### Code
+
+```{r}
+# Create a contingency table: absenteeism levels by day of the week
+day_absenteeism <- table(absent$Day_of_the_week, absent$absenteeism)
+print(day_absenteeism)
+
+# Barplot to visualize absenteeism by day of the week
+barplot(t(day_absenteeism),
+        main = "Absenteeism level by Day of the Week",
+        col = c("lightblue", "red", "green"),
+        xlab = "Day of the Week",
+        ylab = "Absences count",
+        legend = TRUE,
+        names.arg = c("Mon", "Tue", "Wed", "Thu", "Fri"))
+
+
+# Perform Fisher's Exact Test with increased workspace
+fisher_result <- fisher.test(day_absenteeism, workspace = 2e8) # Increase workspace
+print(fisher_result)
+
+# If the problem persists, use Monte Carlo simulation
+fisher_result_simulated <- fisher.test(day_absenteeism, simulate.p.value = TRUE, B = 10000)
+print(fisher_result_simulated)
+```
+
+#### Observations for Question (i)
+
+```markdown
+Copilot said: The Fisher's Exact Test (p = 0.0021)
+The Fisher's Exact Test (p = 0.0021) and the simulated version (p = 0.0017) show 
+a significant association between the day of the week and absenteeism levels. 
+Absenteeism is higher on Monday, Tuesday, and Wednesday compared to Thursday and 
+Friday, especially in the "Low" category.
+```
+
+### Question (j): Identify any outliers in the data set. What could be the reasons 
+###.             for these anomalies, and how might they affect the analysis?
+
+#### Code
+
+```{r}
+# Extract numeric variables from the dataset
+numeric_data <- absent[sapply(absent, is.numeric)]
+
+# Adjust margins and layout for plotting
+par(mar = c(2, 2, 2, 2))  # Set smaller margins
+par(mfrow = c(2, 3))      # Set layout for fewer plots per frame
+
+# Visualize numeric variables using boxplots
+for (col_name in colnames(numeric_data)) {
+  boxplot(numeric_data[[col_name]],
+          main = paste("Boxplot of", col_name),
+          col = "lightblue",
+          outline = TRUE)
+}
+
+# Reset layout
+par(mfrow = c(1, 1))  # Reset to single plot layout
+
+# Function to detect outliers using the IQR rule
+detect_outliers <- function(column_data) {
+  Q1 <- quantile(column_data, 0.25, na.rm = TRUE)
+  Q3 <- quantile(column_data, 0.75, na.rm = TRUE)
+  IQR_value <- Q3 - Q1
+  lower_limit <- Q1 - 1.5 * IQR_value
+  upper_limit <- Q3 + 1.5 * IQR_value
+  
+  # Return indices of outliers
+  return(which(column_data < lower_limit | column_data > upper_limit))
+}
+
+# Apply the outlier detection function to all numeric variables
+outliers <- lapply(numeric_data, detect_outliers)
+
+# Display results
+print("Outliers in each numeric variable:")
+print(outliers)
+
+```
+
+#### Observations for Question (j)
+
+```markdown
+Transportation Expense: Rows [145, 146, 217]
+Reason: High costs from relocation or private transport.
+Impact: Inflates average costs.
+
+Service Time: Rows [235, 508, 511, 514, 577]
+Reason: Long tenure or data errors.
+Impact: Distorts tenure trends.
+
+Age: Rows [256, 435, ..., 730]
+Reason: Very young or retired employees.
+Impact: Skews age analysis.
+
+Work Load (Average): Rows [205-236]
+Reason: Temporary projects or errors.
+Impact: Misrepresents workload patterns.
+
+Pet: Extensive list of rows [7, ..., 738]
+Reason: Data placeholders or reporting errors.
+Impact: False correlations.
+
+Height: Extensive list of rows [2, ..., 727]
+Reason: Unit errors or extreme values.
+Impact: Misleading health metrics.
+
+Absenteeism Time: Rows [9, ..., 735]
+Reason: Medical/parental leave or sabbaticals.
+Impact: Overwhelms absenteeism models.
+
+Recommendations:
+-Validate outliers with domain experts.
+-Remove or adjust anomalies as needed.
+-Analyze separately for unique insights.
+```
+#___________________________________
+# Logistic Regression Analysis Instructions
+#___________________________________
+
+### (a) Building the Logistic Regression Model
+
+#### Explanation:
+We are building a multinomial logistic regression model with the recoded absenteeism 
+categories ("Low", "Moderate", "High") as the response variable. 
+Categorical variables will be handled using appropriate encoding.
+
+####Code:
+```{r}
+# Build the model excluding ID and Absenteeism_time_in_hours
+model <- multinom(absenteeism ~ . -ID -Absenteeism_time_in_hours, data = absent, 
+                  trace = FALSE)
+
+# Summary of the model
+summary(model)
+```
+
+### (b) Interpreting Coefficients of `son` and `weight`
+
+#### Explanation:
+- **`son`**: Represents the number of children an employee has.
+- **`weight`**: Represents the weight of the employee.
+
+####Code:
+```{r}
+# Extract and display the coefficients for 'son' and 'weight'
+coef_summary <- coef(model)  # Extract coefficients as a matrix
+
+# Print the coefficients for 'son'
+print("Coefficients for Son:")
+print(exp(coef_summary[, "Son"]))
+
+# Print the coefficients for 'weight'
+print("Coefficients for Weight:")
+print(exp(coef_summary[, "Weight"]))
+```
+#### Observations for Question (b)
+
+```markdown
+Son:
+Moderate Absenteeism: Odds decrease by ~9.9% for each additional child (OR = 0.901).
+High Absenteeism: Odds increase by ~107% for each additional child (OR = 2.070).
+
+Weight:
+Moderate Absenteeism: Odds increase by ~55.6% for each unit of weight (OR = 1.556).
+High Absenteeism: Odds increase by ~78.7% for each unit of weight (OR = 1.787).
+
+
+More children lead to more chances of having "High" absenteeism for family reasons.
+Employees of higher weight tend to have "Moderate" or "High" absenteeism, possibly 
+as a result of health issues.
+```
+
+### (c) Use backward selection to decide which predictor variables enter should 
+###     be kept in the regression model.
+
+####Code:
+```{r}
+# Perform backward selection using stepAIC
+final_model <- stepAIC(model, direction = "backward", trace = TRUE)
+
+# Summary of the final selected model
+summary(final_model)
+
+# Extract the predictors retained in the final model
+final_predictors <- names(coef(final_model))
+print("Predictors retained in the final model:")
+print(final_predictors)
+```
+
+#### Observations for Question (c)
+
+```markdown
+The final model keeps variables that are significant predictors of absenteeism 
+with minimal model complexity (AIC = 372.33). The predictors Seasons, Education, 
+and Height were excluded from the selection.
+
+The predictors kept indicate that absenteeism is influenced by:
+- Day of the Week: Specific days might have absenteeism patterns that are higher.
+- Distance to Work: Longer distances might influence the level of absenteeism.
+- Workload: Average workload might influence absenteeism.
+- Number of Children (Son): Employees with more children will be more prone to 
+absenteeism.
+- Weight and BMI: Medical reasons could be a cause of absenteeism.
+```
+
+### (d) Interpret some (at least 2) of your model’s findings in a practical 
+###     workplace context.(Formulate recommendations for an organization based 
+###     on these findings.
+
+#### Observations for Question (d)
+
+```markdown
+*******Finding 1: Day_of_the_week*******
+
+The Day_of_the_week predictor has an impact on absenteeism.
+Employees tend to be absent on certain days (e.g., Mondays or Fridays) as 
+opposed to others, which points to a weekend-related absenteeism pattern.
+
+Practical Recommendation:
+- Flexible Work Schedules: Adopt flexible scheduling or remote work on Mondays 
+and Fridays to reduce absenteeism.
+This might reduce "long weekend" absenteeism by providing employees with more 
+autonomy over their work schedule.
+- Engagement Strategies: Increase attendance on such days through team-building 
+exercises or lightened workloads.
+
+*******Finding 2: Distance_from_Residence_to_Work*******
+
+Absenteeism is higher in those employees having longer travel times.
+Physical fatigue, inability to travel, or time limitations may be the cause.
+
+Practical Recommendation:
+- Transportation Support: Offer transport support, i.e., shuttle travel, or travel 
+subsidy on public transport so that travel stress can be reduced.
+- Hybrid or Remote Work: Facilitate telecommuting for a couple of days a week for 
+individuals with lengthy commute times, reducing the need to travel daily and 
+improving attendance.
+```
+
+#_______________________
+# Flu Shot Data Analysis
+#_______________________
+
+
+### Question (a): Create a scatterplot matrix of the data. What are your 
+###.            observations?
+
+#### Explanation
+
+We need to create a scatterplot matrix to visually examine the relationships among 
+the variables:
+
+Y: Flu shot status (1 = Received, 0 = Not Received)
+X1: Age
+X2: Health awareness index
+X3: Gender (1 = Male, 0 = Female)
+
+This will help us observe potential correlations or patterns between predictors 
+and the response variable.
+
+#### Code
+
+```{r}
+flu = read.table("flu shot.txt", header = TRUE)
+
+# Convert categorical variables to factors
+flu$flu_shot = factor(flu$flu_shot, levels = c(0, 1), labels = c("No", "Yes"))
+flu$sex = factor(flu$sex, levels = c(0, 1), labels = c("Female", "Male"))
+
+# Explore structure
+str(flu)
+
+# Logistic regression model
+flu_model = glm(flu_shot ~ age + awareness + sex, data = flu, family = binomial)
+summary(flu_model)
+
+# Create a scatterplot matrix including both numeric and categorical variables
+pairs(flu, main = "Scatterplot Matrix of Flu Shot Data", col = flu$flu_shot)
+
+# Create scatterplot matrix
+ggpairs(
+  flu[, c("age", "awareness", "flu_shot")], 
+  aes(color = flu$flu_shot),
+  title = "Scatterplot Matrix of Flu Shot Data"
+)
+```
+
+#### Observations for Question (a)
+
+```markdown
+Scatterplot Matrix:
+- Age vs. Awareness: A moderate negative correlation (-0.474), where older 
+individuals tend to have lower awareness.
+- Flu Shot:
+Older individuals and those with slightly higher awareness are more likely to 
+receive a flu shot.
+- Gender: No significant difference in age or awareness between males and females.
+
+Logistic Regression:
+- Age: Positive predictor—older individuals are more likely to get a flu shot.
+- Awareness: Negative predictor—higher awareness reduces the likelihood of getting 
+a flu shot.
+- Gender: Not a significant factor.
+
+Conclusion:
+Age and awareness significantly influence flu shot uptake, while gender does not.
+```
+
+### Question (b): Fit a multiple logistic regression to the data with the three 
+###               predictors in first order terms.
+
+#### Explanation
+
+Multiple logistic regression models the relationship between a binary dependent 
+variable and multiple independent variables. It helps to understand how each 
+predictor influences the probability of an event occurring.
+
+#### Code
+
+```{r}
+# Fit the logistic regression model
+flu_model = glm(flu_shot ~ age + awareness + sex, data = flu, family = binomial)
+
+# Display the summary of the model
+summary(flu_model)
+```
+#### Observation of Question (b)
+```markdown
+Intercept:
+Estimate: -1.17716
+-The intercept represents the baseline log-odds of receiving a flu shot when all 
+predictors (age, awareness, and sex) are at their reference levels (e.g., age = 0, 
+awareness = 0, and sex = Female).
+
+Predictor: (age)
+Estimate: 0.07279
+p-value: 0.01658 (Significant at the 5% level).
+Interpretation: For each additional year of age, the log-odds of receiving a flu 
+shot increase by 0.07279. Older individuals are more likely to get vaccinated.
+
+Predictor: (awareness)
+Estimate: -0.09899
+p-value: 0.00311 (Highly significant at the 1% level).
+Interpretation: For each unit increase in the awareness index, the log-odds of 
+receiving a flu shot decrease by 0.09899. Higher awareness is associated with a 
+lower likelihood of getting vaccinated.
+
+Predictor: (sex)
+Estimate: 0.43397
+p-value: 0.40558 (Not significant).
+Interpretation: The gender of the individual (Male vs. Female) does not 
+significantly impact the likelihood of receiving a flu shot.
+```
+
+### Question (c): State the fitted regression equation.
+
+#### Explanation
+
+The fitted regression equation represents the relationship between the dependent 
+variable and the independent variables in a logistic regression model.
+
+#### Code
+
+```{r}
+# Fitted regression equation
+beta <- coef(flu_model)
+cat("Fitted regression equation: logit(flu_shot) =", round(beta[1], 2), "+", 
+    round(beta[2], 2), "* age +", round(beta[3], 2), "* awareness +", 
+    round(beta[4], 2), "* sex")
+```
+
+#### Observations for Question (c)
+
+```markdown
+Intercept: When age = 0, awareness = 0, and sex = Female, the log-odds of 
+receiving a flu shot are -1.18.
+
+Age: For every 1-year increase in age, the log-odds of receiving a flu shot 
+increase by 0.07. Older individuals are more likely to get vaccinated.
+
+Awareness: For every 1-unit increase in the awareness index, the log-odds of 
+receiving a flu shot decrease by 0.1. Higher awareness is associated with a 
+lower likelihood of getting vaccinated.
+
+Sex (Male): Males have 0.43 higher log-odds of receiving a flu shot compared to 
+females.
+```
+
+### Question (d): Obtain exp(β1), exp(β2), exp(β3) and interpret these numbers.
+
+#### Explanation
+
+The exponentiated coefficients (exp(beta)) represent the odds ratios, 
+which indicate how the odds of the dependent variable change with a one-unit 
+increase in the predictor variable.
+
+#### Code
+
+```{r}
+# Exponentiated coefficients
+exp_beta <- exp(coef(flu_model))
+exp_beta
+```
+
+#### Observations for Question (d)
+
+```markdown
+Age (exp⁡(β1)=1.0755):
+For every 1-year increase in age, the odds of receiving a flu shot increase by 
+approximately 7.55%, holding all other variables constant.
+
+Awareness (exp⁡(β2)=0.9058):
+For every 1-unit increase in the awareness index, the odds of receiving a flu 
+shot decrease by approximately 9.42% (1−0.9058),holding all other variables constant.
+
+Sex (Male) (exp⁡(β3)=1.5435):
+Males have 1.54 times the odds (or are 54.35% more likely) of receiving a flu 
+shot compared to females, holding all other variables constant.
+```
+
+### Question (e): What is the estimated probability that male clients aged 55 
+###               with a health awareness index of 60 will receive a flu shot?
+
+#### Explanation
+
+Predicting the probability of an event occurring based on the logistic regression 
+model involves using the fitted coefficients and the values of the predictors.
+
+#### Code
+
+```{r}
+# Logistic regression model coefficients
+beta <- coef(flu_model)
+
+# Calculate odds ratios
+odds_ratios <- exp(beta)
+cat("Odds Ratios:\n")
+print(odds_ratios)
+
+# Estimating the probability for a male client, age 55, awareness index 60
+age <- 55
+awareness <- 60
+sex <- 1  # Male
+
+logit <- beta[1] + beta[2] * age + beta[3] * awareness + beta[4] * sex
+probability <- exp(logit) / (1 + exp(logit))
+
+cat("\nEstimated Probability for male (age 55, awareness 60):", round(probability, 4), "\n")
+```
+
+#### Observations for Question (e)
+
+```markdown
+For a male patient aged 55 years and possessing a health awareness index score 
+of 60, the probability of being vaccinated for the flu shot is approximately 
+6.42%. This shows that in this situation, probabilities for vaccination are 
+still low.
+```
+
+### Question (f): Using the Wald test, determine whether X3 , client gender, can 
+###               be dropped from the regression model; use α= 0.05.
+
+#### Explanation
+
+The Wald test assesses the significance of individual predictors in the logistic 
+regression model. It helps to determine if a predictor can be dropped from the 
+model.
+
+#### Code
+
+```{r}
+# Extract the coefficient and standard error for `sexMale`
+coef_sex <- coef(flu_model)["sexMale"]
+se_sex <- summary(flu_model)$coefficients["sexMale", "Std. Error"]
+
+# Calculate the Wald test statistic (Z-value)
+wald_statistic <- coef_sex / se_sex
+
+# Calculate the p-value for the Wald test
+p_value <- 2 * (1 - pnorm(abs(wald_statistic)))
+
+# Print the results
+cat("Wald Test Statistic for 'sexMale':", wald_statistic, "\n")
+cat("P-value for Wald Test:", p_value, "\n")
+
+# Check significance
+alpha <- 0.05
+if (p_value > alpha) {
+  cat("The p-value is greater than", alpha, ". We fail to reject the null hypothesis. 
+      'sex' can be dropped from the model.\n")
+} else {
+  cat("The p-value is less than", alpha, ". We reject the null hypothesis. 'sex' 
+      should be kept in the model.\n")
+}
+```
+
+#### Observations for Question (f)
+
+```markdown
+The Wald test was conducted to determine if the gender variable is statistically 
+significant in predicting the likelihood of receiving a flu shot.
+
+Wald Test Statistic: 0.8316976
+P-value: 0.4055797
+
+Conclusion:
+The p-value is greater than 0.05 . We fail to reject the null hypothesis. 'sex' 
+can be dropped from the model.
+```
+
+### Question (g): Use forward selection to decide which predictor variables enter 
+###               should be kept in the regression model.Forward Selection for 
+###               Predictor Variables
+
+#### Explanation
+
+Forward selection is a stepwise regression method that starts with an empty model 
+and adds significant predictors one by one. It helps to identify the most important 
+predictors for the model.
+
+#### Code
+
+```{r}
+# Define the full model (all predictors)
+flu_model <- glm(flu_shot ~ age + awareness + sex, family = binomial, data = flu)
+
+# Perform forward selection using stepAIC
+forward_model <- step(glm(flu_shot ~ 1, family = binomial, data = flu),
+                      scope = list(lower = ~1, upper = ~age + awareness + sex), 
+                      direction = "forward")  # Forward selection
+
+# Summary of the selected model
+summary(forward_model)
+```
+
+#### Observations for Question (g)
+
+```markdown
+Awareness: Negative relationship ((p = 0.003)), reducing odds of flu shots as 
+awareness increases.
+Age: Positive relationship ((p = 0.009)), increasing odds of flu shots with age.
+
+Conclusion:
+The final model includes awareness and age as predictors. Sex is not significant 
+and is excluded.
+```
+
+### Question (h): Use backward selection to decide which predictor variables enter 
+###               should be kept in the regression model. How does this compare 
+###               to your results in part (f)?
+
+#### Explanation
+Backward selection is a stepwise regression method that starts with a full model 
+and removes non-significant predictors one by one. It helps to simplify the model 
+by retaining only significant predictors.
+
+#### Code
+
+```{r}
+# Define the full model (all predictors)
+flu_model <- glm(flu_shot ~ age + awareness + sex, family = binomial, data = flu)
+
+# Perform backward selection using stepAIC
+backward_model <- step(flu_model, direction = "backward")
+
+# Summary of the selected model
+summary(backward_model)
+```
+
+#### Observations for Question (h)
+
+```markdown
+Comparison of Backward Selection Results to Part (f) (Wald Test for Gender):
+
+Wald Test Result (Part f):
+The Wald test showed that the gender variable ((X_3)) is not statistically 
+significant ((p = 0.4056 > 0.05)).
+
+Conclusion: Gender can be dropped from the regression model.
+
+Backward Selection Result (Part h):
+In backward selection, gender ((X_3)) was also removed because it did not 
+significantly improve the model (AIC decreased when gender was excluded).
+
+Final Model: Included age and awareness as significant predictors, excluding gender.
+
+Comparison:
+Both the Wald test and backward selection agree that gender ((X_3)) is not a 
+meaningful predictor and can be excluded from the regression model. 
+This consistency reinforces the conclusion that gender does not contribute 
+significantly to predicting the outcome.
+```
+
+### Question (i): How would you interpret
+ˆ
+β0,
+ˆ
+β1 and
+ˆ
+β3
+
+#### Explanation
+
+Interpreting the coefficients in a logistic regression model helps to understand 
+the impact of each predictor on the dependent variable. The coefficients represent 
+the change in log odds for a one-unit increase in the predictor.
+
+#### Code
+
+```{r}
+
+# Fit logistic regression model
+flu_model <- glm(flu_shot ~ age + awareness + sex, data = flu, family = binomial)
+
+# Summary of the model
+summary(flu_model)
+
+# Extract coefficients
+coefficients <- coef(flu_model)
+
+# Interpret coefficients
+beta_0 <- coefficients[1]  # Intercept
+beta_1 <- coefficients[2]  # Age
+beta_3 <- coefficients[4]  # Sex
+
+# Convert to odds ratio for interpretation
+exp_beta_0 <- exp(beta_0)  # Baseline odds when all predictors are 0
+exp_beta_1 <- exp(beta_1)  # Effect of 1-unit increase in age on odds
+exp_beta_3 <- exp(beta_3)  # Effect of gender (1 vs. 0) on odds
+
+# Print interpretations
+cat("Interpretation of coefficients:\n")
+cat("1. exp(beta_0): Baseline odds =", exp_beta_0, "\n")
+cat("2. exp(beta_1): Odds ratio for 1-unit increase in age =", exp_beta_1, "\n")
+cat("3. exp(beta_3): Odds ratio for sex (Male vs Female) =", exp_beta_3, "\n")
+```

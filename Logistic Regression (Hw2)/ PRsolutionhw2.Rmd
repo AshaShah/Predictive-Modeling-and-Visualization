@@ -1,0 +1,269 @@
+---
+title: "HW2"
+output:
+  pdf_document:
+    latex_engine: xelatex
+
+date: "2025-04-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(GGally)
+library(car)
+library(ggcorrplot)
+```
+## 1.Absenteesim data
+
+```{r}
+absent= read_excel("Absenteeism_at_work.xls")
+names(absent)
+
+str(absent)
+head(absent)
+tail(absent)
+
+absent <- absent %>%
+  mutate(absenteeism = case_when(
+    Absenteeism_time_in_hours >= 0 & Absenteeism_time_in_hours <= 20 ~ "Low",
+    Absenteeism_time_in_hours > 20 & Absenteeism_time_in_hours <= 40 ~ "Moderate",
+    Absenteeism_time_in_hours > 40 ~ "High"
+  ))
+```
+## (a) How is the ‘Absenteeism time in hours’ distributed? Are there any noticeable patterns or outliers?
+```{r}
+hist(absent$Absenteeism_time_in_hours, main="Absenteeism Time Distribution", col="skyblue", breaks=10)
+boxplot(absent$Absenteeism_time_in_hours, main="Boxplot of Absenteeism Time",col="orange", breaks=10)
+summary(absent$Absenteeism_time_in_hours)
+```
+The distribution of Absenteeism_time_in_hours reveals a highly right-skewed pattern, as seen in both the histogram and boxplot. The histogram shows a sharp concentration of values between 0 and 10 hours, indicating that the majority of employees have minimal absenteeism. This is further supported by the summary statistics: the median absenteeism is 3 hours, while the mean is notably higher at 6.9 hours, highlighting the influence of a few high values. The boxplot emphasizes the presence of multiple outliers, with absenteeism hours extending up to 120 hours. These extreme values suggest a subset of employees with significantly higher absenteeism, possibly due to long-term leave or health-related issues. Overall, the distribution is positively skewed, and the presence of outliers may affect model assumptions and should be considered when building predictive models.
+
+## (b) What is the distribution of ages among the employees? Are certain age groups more prevalent?
+```{r}
+hist(absent$Age, 
+     breaks = 10, 
+     col = "skyblue", 
+     main = "Histogram of Employee Age", 
+     xlab = "Age", 
+     ylab = "Frequency")
+summary(absent$Age)
+boxplot(absent$Age,
+        main = "Boxplot of Employee Age",
+        ylab = "Age",
+        col = "yellow")
+absent <- absent %>%
+  mutate(age_group = cut(Age, breaks = c(20, 30, 40, 50, 60, 70), 
+                         labels = c("21–30", "31–40", "41–50", "51–60", "61–70")))
+barplot(table(absent$age_group),
+        main = "Age Group Distribution",
+        col = "green",
+        xlab = "Age Group",
+        ylab = "Count")
+```
+
+The distribution of employee ages at the courier company reveals a concentration of workers in the mid-career range, particularly between 31 and 40 years old. This is clearly illustrated in the histogram, where a strong peak is observed around ages 35 to 38, indicating that this age group forms the core of the workforce. The bar plot further confirms this trend, showing that the 31–40 age group accounts for the highest number of employees—more than 400—while representation in older groups such as 51–60 is minimal, and virtually no employees are in the 61–70 range. The boxplot complements these findings by displaying a median age of 37, with the interquartile range (IQR) spanning from 31 to 40, highlighting that the central 50% of employees fall within this range. A minor outlier above age 55 is also visible in the boxplot, but it does not significantly distort the overall pattern. Supporting these visuals, the numerical summary shows a minimum age of 27, a maximum of 58, and a mean age of 36.45, aligning well with the graphical evidence. Altogether, this suggests that the company’s workforce skews toward a younger to middle-aged demographic, with very few older employees. This age structure could have implications for workplace policies and absenteeism patterns, especially if family responsibilities or early-career stress contribute to employee attendance behavior.
+
+## (c) Is there a correlation between the distance from residence to work and absenteeism time?
+```{r}
+plot(absent$Distance_from_Residence_to_Work,absent$Absenteeism_time_in_hours,main = "Distance vs Absenteeism Time",xlab = "Distance from Residence to Work (km)",ylab = "Absenteeism Time (hours)",pch = 19, col = "blue")
+cor(absent$Distance_from_Residence_to_Work,absent$Absenteeism_time_in_hours,use = "complete.obs", method = "pearson")
+```
+There is no significant correlation between the distance from residence to work and absenteeism time.
+The Pearson correlation coefficient is -0.088, indicating a very weak and negative relationship.
+The scatter plot supports this, showing that absenteeism occurs across all distance ranges, with no clear pattern.
+Therefore, distance is unlikely to be a strong predictor of absenteeism in this dataset.
+
+## (d) How does the work load average per day relate to absenteeism? Are higher workloads associated with more or less absenteeism?
+```{r}
+plot(absent$Work_load_Average_in_days, absent$Absenteeism_time_in_hours,
+     xlab = "Work Load Average per Day",
+     ylab = "Absenteeism Time in Hours",
+     main = "Workload vs Absenteeism Time")
+cor(absent$Work_load_Average_in_days, absent$Absenteeism_time_in_hours, use = "complete.obs")
+boxplot(Work_load_Average_in_days ~ absenteeism, data = absent,
+        xlab = "Absenteeism Level", ylab = "Workload Average/Day",
+        main = "Workload by Absenteeism Level")
+```
+
+The correlation between absenteeism and the average daily workload In light of the correlation coefficient of 0.025, which is near zero, time seems to be quite weak. This implies that the average workload of an employee and the number of hours they miss from work do not have a significant linear relationship.
+
+The data points are widely dispersed and lack a discernible upward or downward trend, which is supported by the scatter plot. Higher workload does not always translate into higher or lower absenteeism, as this dispersion further demonstrates.
+A comparison of workload among absenteeism levels ("Low", "Moderate" and "High") in a boxplot shows some intriguing trends. The median workloads of employees in the high absenteeism group are often lower than those of employees with moderate absenteeism. All three groups workload ranges, however, significantly overlap, and each group exhibits variability due to the presence of multiple outliers.
+Workload is not a reliable independent predictor of absenteeism time in this dataset, according to the correlation and these images taken together. Minor variations between categories might exist, but without additional research—possibly involving interaction effects or other variables—the patterns aren't robust enough to establish a definitive conclusion.
+
+## (e) Analyze the absenteeism based on education levels. Do certain education levels correlate with higher or lower absenteeism?
+```{r}
+ggplot(absent, aes(x = Education, fill = absenteeism)) + geom_bar(position = "fill") + labs(title = "Absenteeism by Education Level", y = "Proportion") + theme_minimal()
+```
+
+The bar plot shows that people at all education levels mostly have low absenteeism rates, which suggests that education isn’t a major factor affecting absenteeism. The levels of moderate and high absenteeism are also low across different educational backgrounds, indicating that other factors might play a bigger role. Since there isn’t much difference in absenteeism based on education level, it might not be useful to include education as a main predictor in models that try to predict absenteeism.
+
+## (f) Which variables show the strongest correlation with absenteeism time in hours? How might these influence your logistic regression model?
+```{r}
+numeric_vars <- absent %>%select(Transportation_expense, Distance_from_Residence_to_Work, Service_time,Age, Work_load_Average_in_days, Weight, Height, Body_mass_index,Absenteeism_time_in_hours)
+
+correlation_matrix <- cor(numeric_vars, use = "complete.obs")
+
+absenteeism_correlations <- correlation_matrix["Absenteeism_time_in_hours", ]
+absenteeism_correlations
+
+```
+None of the variables show strong correlations with absenteeism time in hours, which suggests that absenteeism might be affected more by factors that aren’t included in this dataset or by relationships that aren’t easily seen with simple correlation methods. This means that when creating predictive models, like logistic regression, it could be helpful to look at how different variables interact with each other or to include other factors that might have a bigger impact on absenteeism. For example, things like psychological factors, job satisfaction, or the workplace environment could play a significant role.
+
+## (g) Are there any unexpected correlations or findings that challenge common assumptions about workplace absenteeism?
+```{r}
+cor_data <- as.data.frame(as.table(correlation_matrix))
+names(cor_data) <- c("Variable1", "Variable2", "Correlation")
+
+absenteeism_correlations <- absenteeism_correlations[order(absenteeism_correlations, decreasing = TRUE)]
+print(round(absenteeism_correlations, 3))
+
+ggcorrplot(correlation_matrix, hc.order = TRUE, type = "lower",lab = TRUE,title = "Correlation Matrix with Absenteeism")
+```
+The correlation and heatmap show that none of the variables have a strong linear relationship with absenteeism time. Interestingly, height has the highest correlation at 0.144, but this is probably just a coincidence. Other common factors, like distance from home (-0.088) and workload (0.025), also show weak or almost no correlation, which goes against what we might usually expect. These findings suggest that absenteeism could be influenced more by factors we didn’t measure, like health or job satisfaction.
+
+## (h) Does service time (duration of service in the company) have any impact on the absenteeism rate?
+```{r}
+boxplot(Service_time ~ absenteeism, data = absent,col = "lightblue", main = "Service Time by Absenteeism Level",xlab = "Absenteeism Level", ylab = "Service Time (years)")
+
+cor(absent$Service_time, absent$Absenteeism_time_in_hours, use ="complete.obs")
+
+```
+The boxplot shows that service time is pretty similar across all absenteeism levels, with the medians and ranges overlapping in the "Low," "Moderate," and "High" groups. The "Low" absenteeism group has a bit more spread and a few outliers, but there isn’t a clear pattern that suggests that longer or shorter service time leads to more absenteeism. This is also supported by the correlation coefficient of just 0.019, which means there’s a very weak positive relationship between service time and absenteeism hours. Overall, both the boxplot and the correlation indicate that service time doesn’t have a significant impact on absenteeism and may not be a strong predictor when trying to understand absenteeism behavior.
+
+## (i) Examine if day of the week has any influence on absenteeism – are certain days more prone to absences?
+```{r}
+barplot(table(absent$Day_of_the_week),
+        col = "skyblue",
+        main = "Frequency of Absenteeism by Day of the Week",
+        xlab = "Day of the Week (2=Mon, ..., 6=Fri)",
+        ylab = "Number of Absences")
+
+boxplot(Absenteeism_time_in_hours ~ Day_of_the_week, data = absent,
+        col = "lightgreen",
+        main = "Absenteeism Time by Day of the Week",
+        xlab = "Day of the Week (2=Mon, ..., 6=Fri)",
+        ylab = "Absenteeism Time (Hours)")
+
+```
+The analysis shows that the day of the week does affect absenteeism patterns. The bar plot reveals that absenteeism is most common on Mondays (Day 2), followed closely by Tuesdays and Wednesdays, while Thursdays (Day 5) have the fewest absences. This suggests that people tend to miss work more often at the beginning of the week, possibly because of long weekends or feeling less motivated.
+
+The boxplot supports this idea, showing that median absenteeism times are a bit higher on Mondays compared to other days, with more variation and some extreme outliers. This means that not only are absences more frequent on Mondays, but they might also be more serious, which is something management should pay attention to.
+
+Overall, these findings suggest that Monday is the day with the highest absenteeism, and organizations could benefit from creating specific policies or wellness programs to help improve attendance at the start of the week.
+
+## (j) Identify any outliers in the data set. What could be the reasons for these anomalies, and how might they affect the analysis?
+```{r}
+summary(absent$Absenteeism_time_in_hours)
+boxplot(absent$Absenteeism_time_in_hours, main = "Boxplot of Absenteeism Time", col = "orange")
+
+boxplot.stats(absent$Absenteeism_time_in_hours)$out
+```
+The boxplot and summary statistics for Absenteeism_time_in_hours show several clear outliers, with some values going as high as 120 hours, which is much more than what is typical. The median absenteeism time is only 3 hours, and the third quartile is 8 hours, but these extreme values pull the distribution to the right. These outliers likely represent long-term absences due to medical issues, surgeries, or personal emergencies, rather than the usual short-term leave.
+
+These outliers can affect the mean, increase variance, and potentially impact how well models perform, especially in analyses that assume a normal distribution or use continuous values. While categorizing absenteeism into Low, Moderate, and High can help reduce their impact, it’s still important to recognize and address these extreme cases. This could be done by transforming the data, excluding the outliers, or modeling them separately to ensure a more accurate and reliable analysis.
+
+## 2.Flu shots data
+
+## Given,
+## A client who received a flu shot or not if yes coded Y = 1 else coded Y = 0.
+## client age (X1) 
+## client awareness (X2)
+## client sex (X3)
+```{r}
+flu_data <- read.table("HW2_stat/flu_shot.txt", header = TRUE)
+colnames(flu_data) <- c("FluShot", "Age", "Awareness", "Sex")
+
+str(flu_data)
+head(flu_data)
+tail(flu_data)
+```
+
+## (a) Create a scatter plot matrix of the data. What are your observations?
+
+
+```{r}
+flu_data$FluShot <- as.factor(flu_data$FluShot)
+predictor_data <- flu_data[, c("Age", "Awareness", "Sex")]
+ggpairs(predictor_data, aes(color = flu_data$FluShot, alpha = 0.7))
+```
+
+The scatter plot matrix shows that awareness is really important for telling apart people who got a flu shot from those who didn’t. There’s a negative correlation between age and awareness, especially in the group that didn’t get vaccinated. This means that older adults might need more targeted educational programs to help them understand why getting a flu shot is important. Also, it seems like sex doesn’t really have much of an impact on awareness or whether someone decides to get vaccinated
+
+## (b) Fit a multiple logistic regression to the data with the three predictors in first order terms.
+```{r}
+model_full <- glm(flu_data$FluShot ~ Age + Awareness + Sex, data = flu_data, family = binomial)
+summary(model_full)
+```
+A multiple logistic regression model was created using age, health awareness, and sex to predict whether someone gets a flu shot. This model estimates the log-odds of receiving a flu shot based on these factors. It shows how each factor affects the chances of getting vaccinated while keeping the other factors the same.
+
+## (c) State the fitted regression equation.
+from summary we can interpret
+Y=−1.17716+0.07279(Age)−0.09899(Awareness)+0.43397(Sex) + error
+
+## (d) Obtain exp(βˆ1), exp(βˆ2), exp(βˆ3) and interpret these numbers.
+```{r}
+coef(model_full)
+exp(coef(model_full)[-1])
+```
+The odds ratios from the study help us understand how different factors affect the likelihood of getting a flu shot. For age, the odds ratio is about 1.0755, which means that for every year you get older, your chances of getting a flu shot increase by about 7.6%, assuming that awareness and sex remain the same.
+For awareness, the odds ratio is around 0.9057. This means that if your health awareness score goes up by one unit, your chances of getting a flu shot actually decrease by about 9.4%. This suggests that being more aware of health issues might not necessarily lead to getting a flu shot, at least when we look at the other factors.
+Lastly, the odds ratio for sex is 1.5432, indicating that males (coded as 1) are about 54% more likely to get a flu shot compared to females (coded as 0), when all other factors are held constant. However, it's important to note that the effect of sex wasn't statistically significant at the 0.05 level, which means we can't be very confident about this finding.
+
+
+## (e) What is the estimated probability that male clients aged 55 with a health awareness index of 60 will receive a flu shot?
+```{r}
+new_client <- data.frame(Age = 55, Awareness = 60, Sex = 1)
+predicted_prob <- predict(model_full, newdata = new_client, type = "response")
+predicted_prob
+```
+the estimated probability that male clients aged 55 with a health awareness index of 60 will receive a flu shot is 0.06422197 which approximate of 6.422%.
+
+## (f) Using the Wald test, determine whether X3 , client gender, can be dropped from the regression model; use α = 0.05.
+```{r}
+linearHypothesis(model_full, "Sex = 0")
+```
+The p-value of 0.4056 is higher than the significance level of 0.05, which means we don't have enough evidence to reject the null hypothesis. In simpler terms, this suggests that gender does not have a significant impact on the chances of getting a flu shot based on the data we have. As a result, we can consider leaving out gender (Sex) from the model without losing much in terms of explaining the results.
+
+## (g) Use forward selection to decide which predictor variables enter should be kept in the regression model.
+```{r}
+model_null <- glm(flu_data$FluShot ~ 1, data = flu_data, family = binomial)
+model_forward <- step(model_null,
+                      scope = list(lower = model_null, upper = model_full),
+                      direction = "forward")
+summary(model_forward)
+```
+Using the forward selection method, we ended up with a final model that includes Awareness and Age as important factors in predicting whether someone gets a flu shot. We decided to leave out the variable for Sex because it didn't really help improve the model based on the AIC and p-values. This backs up our earlier conclusion that we can drop gender from the model without losing important information.
+
+## (h) Use backward selection to decide which predictor variables enter should be kept in the regression model. How does this compare to your results in part (f)?
+```{r}
+model_backward <- step(model_full, direction = "backward")
+summary(model_backward)
+```
+Both the forward and backward selection methods gave us the same final model, keeping Age and Awareness while removing Sex. This matches the results from the Wald test we discussed earlier, which strongly suggests that gender is not an important factor in predicting whether someone gets a flu shot in this logistic regression model.
+
+## (i) How would you interpret βˆ0, βˆ1 and βˆ3
+```{r}
+summary(model_full)
+```
+interpretation of βˆ0:Intercept
+The intercept, which is β^0 = -1.1772, shows the estimated log-odds of a client getting a flu shot when all the predictor variables (like age, awareness, and sex) are set to zero. This would mean we’re looking at a newborn girl with a health awareness score of 0, which doesn’t really make sense for this study. So, while the intercept is important for figuring out probabilities using the logistic function, it doesn’t really have a clear meaning on its own in this situation. Its main job is to help set up the model so we can understand how age, awareness, and gender affect the results.
+
+interpretation of βˆ1:Age
+The coefficient for age, which is β^1 = 0.0728, shows that if we keep awareness and gender the same, each extra year a client gets older increases the log-odds of them getting a flu shot by about 0.0728. When we turn that into an odds ratio, it comes out to about 1.0755. This means that for every year someone ages, their chances of getting a flu shot go up by around 7.6%. This suggests that older people are more likely to get flu shots, which makes sense since public health efforts often focus on vaccinating older folks who are at a higher risk for complications.
+
+interpretation of βˆ3:Sex
+The coefficient for sex, which is β^3 = 0.4340, shows how being male (coded as 1) compared to being female (coded as 0) affects the log-odds of getting a flu shot, while keeping age and awareness the same. When we look at the exponentiated value of this coefficient, it’s about 1.5434, which means that males have around 54.3% higher odds of getting a flu shot compared to females. However, the p-value for this coefficient is pretty high (p = 0.406), which means that this difference isn’t statistically significant at the usual α = 0.05 level. So, while the model hints at a possible difference in flu shot uptake between genders, the evidence isn’t strong enough to say for sure that sex is an important factor in this case.
+
